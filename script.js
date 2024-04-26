@@ -1,4 +1,5 @@
 // @ts-check
+"use strict";
 
 class MapVector {
     /** @type {Vector} */
@@ -56,7 +57,7 @@ class MapPixel {
 
 let fov = 60 //make it even, not odd
 let fps = 40
-let renderAccuracy = 1200 //ammount of blocks per frame
+let renderAccuracy = 600 //ammount of blocks per frame
 let turnSensitivity = 3 //degrees turning on click of a or d
 let stepLength = 0.1 //how far you go every frame
 let renderDistance = 250 //impacts how far away a wall has to be to not appear, much longer distances might slow down the game
@@ -64,7 +65,7 @@ let gameSpeed = 1000//lower the number to make it faster 1000 is default
 let sprintRate = 10// sprint is this number * regular speed
 let speedDampening = 0.05 //how fast you slow down, 0 makes you go on ice, 1 is instant
 let maxSpeed = 20
-let recoilSeverity = 5
+let recoilSeverity = 0.5
 let bounceDampening = 0.5 //0 no bounce, 1 same speed
 let gametickPause = false
 let noclip = true
@@ -112,24 +113,66 @@ const keyMap = {
     'l': 5,
     ' ': 6,
     'i': 7,
-    'k': 8
+    'k': 8,
+    'm': 9
 };
 const myCanvas = /** @type {HTMLCanvasElement} */ (document.getElementById("content"));
 myCanvas.height = 500;
 let canvasHeight = myCanvas.height
 myCanvas.width = 1200;
+const myUI = /** @type {HTMLCanvasElement} */ (document.getElementById("UI"));
+myUI.height = 500;
+myUI.width = 1200
 const myMap = /** @type {HTMLCanvasElement} */ (document.getElementById("map"));
 myMap.height = 500;
 myMap.width = 500;
-const ctm = /** @type {CanvasRenderingContext2D} */ (myMap.getContext("2d", { alpha: false }));
+const ctm = /** @type {CanvasRenderingContext2D} */ (myMap.getContext("2d"));
 const ctx = /** @type {CanvasRenderingContext2D} */ (myCanvas.getContext("2d"));
+const ctu = /** @type {CanvasRenderingContext2D} */ (myUI.getContext("2d"));
 
 /** @type {MapPixel[][]} */
 const mapData = []
 /** @type {MapVector[]} */
 const vectorMapData = []
 let isShiftPressed = false
+const Gun1 = new Image();
+Gun1.src = "DNpistol1.png";
+const skybox = new Image()
+skybox.src = "skybox1.png"
+const testTexture1 = new Image()
+testTexture1.src = "bukit2.png"
+const crosshair = new Image()
+crosshair.src = "crosshair1.png"
+const chainlinkFence = new Image()
+chainlinkFence.src = "chainlink_fence.png"
 
+
+function drawGunAnimation(frame, gun) {
+    const gunPlacement = { x: 650, y: 250 }
+    const gunScale = { x: 250, y: 250 }
+    ctu.clearRect(gunPlacement.x, gunPlacement.y, gunScale.x, gunScale.y)
+    const imageWidth = gun.width - 5
+    const frameShift = (imageWidth / 4) * (frame - 1)
+    ctu.drawImage(gun, frameShift, 0, imageWidth / 4, gun.height, gunPlacement.x, gunPlacement.y, gunScale.x, gunScale.y);
+
+}
+let logpring = 0
+function drawSkybox(skybox, rotation) {
+    // if (logpring<100){console.log(playerpos.rotation);logpring++}
+    const rot = skybox.width / 360
+    ctx.drawImage(skybox, rotation * rot, 0, rot * fov, skybox.height, 0, canvasHeight / 2 - 450, myCanvas.width, skybox.height - 40)
+    if (rotation + fov > 360) { ctx.drawImage(skybox, rotation * rot - skybox.width, 0, rot * fov, skybox.height, 0, canvasHeight / 2 - 450, myCanvas.width, skybox.height - 40) }
+}
+UIHandler()
+function UIHandler() {
+    ctu.drawImage(crosshair, myUI.width / 2 - 10, myUI.height / 2  /*-110*/, 20, 20)
+    drawGunAnimation(1, Gun1)
+    ctu.fillStyle = "grey"
+    ctu.fillRect(0, 500, 1200, 200)
+    ctu.fillStyle = "white"
+    ctu.font = `80px Verdana`;
+    ctu.fillText("this will be a banger UI some day", 10, 600, 1190)
+}
 /**
  * @typedef {Object} ControllerKey
  * @property {string} key
@@ -146,7 +189,9 @@ const controller = {
     5: { key: "l", pressed: false },
     6: { key: " ", pressed: false },
     7: { key: "i", pressed: false },
-    8: { key: "k", pressed: false }
+    8: { key: "k", pressed: false },
+    9: { key: "m", pressed: false }
+
 }
 
 makeLine(100, 100, 400, 400, "material-rainbow", false, "wall")
@@ -154,8 +199,8 @@ makeLine(100, 100, 400, 100, "materialverticalblackwhitesinewave", false, "wall"
 makeLine(400, 100, 400, 400, "material verticalblacklineonwhite", false, "wall")
 makeLine(450, 200, 500, 300, "materialverticalseawave", true, "passThroughMaterial")
 makeLine(100, 200, 300, 400, "pink", false, "wall")
-makeLine(200, 200, 202, 200, "materialverticalbricks", false, "wall")
-makeLine(198, 200, 301, 200, "materialglass", true, "wall")
+makeLine(300, 200, 300, 300, "materialimagetestTexture1", false, "wall")
+makeLine(200, 200, 300, 200, "materialimagechainlinkFence", true, "wall")
 makeLine(248, 250, 301, 200, "material-glass", true, "wall")
 document.addEventListener("keydown", (event) => {
     keySwitchboard(event, true, event.shiftKey);
@@ -176,7 +221,7 @@ function moveMaker() {
  */
 function keySwitchboard(event, isDown, isShiftDown) {
     const key = event.key.toLowerCase()
-    if (key.search(/^[wasd jlik]$/g) == 0) {
+    if (key.search(/^[wasd jlikm]$/g) == 0) {
         const index = keyMap[key];
         controller[index].pressed = isDown;
     }
@@ -200,6 +245,7 @@ function apply() {
     noclip = /** @type {HTMLInputElement} */ (document.getElementById("noclip")).checked
 }
 let fireCooldown = false
+const Gun1shot = new Audio('DNpistolshot.mp3');
 /**
  * @param {string} key 
  */
@@ -237,6 +283,25 @@ function keyInterpreter(key) {
             const correctPitch = canvasHeight
             movement(0.1 * recoilSeverity, angleCorrector(180))
             function recoil() {
+                switch (recoilCount) {
+                    case 1:
+                        drawGunAnimation(2, Gun1)
+                        const newAudio = Gun1shot.cloneNode()
+                        newAudio.play()
+                        break;
+                    case 3:
+                        drawGunAnimation(3, Gun1)
+                        break;
+                    case 7:
+                        drawGunAnimation(4, Gun1)
+                        break;
+                    case 14:
+                        drawGunAnimation(1, Gun1)
+                        break;
+                    default:
+
+                        break;
+                }
                 fireCooldown = true
                 if (recoilCount <= 10) {
                     isFiring = true
@@ -249,6 +314,7 @@ function keyInterpreter(key) {
                     canvasHeight -= randomNumber
                     playerpos.rotation -= randomNumber * 0.1
                     recoilCount++
+
                 }
                 if (recoilCount < 21) {
                     setTimeout(() => {
@@ -308,13 +374,14 @@ function movementExecuter() {
  */
 function bounceCalculator(wallDetection, shift, ignoreCollision, isFirstBounce) {
     if (!ignoreCollision && wallDetection != undefined) {
-        /** @type {Vector | undefined} */
-        let wallNormal = undefined
+        let wallNormal = { x: 1, y: 1 }
         if (Array.isArray(wallDetection)) {
             if (wallDetection[0].proximity > 0.01) {
                 wallNormal = normaliseVector({ x: -(wallDetection[0].end.y - wallDetection[0].start.y), y: (wallDetection[0].end.x - wallDetection[0].start.x) })
             }
-            else if (wallDetection[0].proximity < 0.01 && !isFirstBounce) { console.log(wallDetection[1], "bruh") }
+            else if (wallDetection[0].proximity < 0.01 && !isFirstBounce) {
+                console.log(wallDetection[1], "bruh")
+            }
 
         }
         else { wallNormal = normaliseVector({ x: -(wallDetection.end.y - wallDetection.start.y), y: (wallDetection.end.x - wallDetection.start.x) }) }
@@ -381,6 +448,7 @@ function angleCorrector(angle) {
 let currentFrameData = []
 function drawFrame() {
     ctx.clearRect(0, 0, myCanvas.width, myCanvas.height)
+    drawSkybox(skybox, playerpos.rotation)
     const wallProportionsX = Math.ceil(myCanvas.width / renderAccuracy)
     const angleEnd = playerpos.rotation + fov / 2
     const angleDifference = fov / renderAccuracy
@@ -427,54 +495,52 @@ function frameExecuter() {
     //i need to make one where the background is 1 color and then you imprint another on that line because them bricks are frame murderers
     currentFrameData.forEach(element => {
         if (isObject(element.material)) {
-            const lineLength = element.yWidth
-            let currentHeight = element.yPos
-            materialApplier: for (let v = 0; v < Object.keys(element.material).length; v++) {
-                if (v == 0) {
+            if (element.material.image != undefined) {
+                ctx.drawImage(element.material.image, element.material.position, 0, myCanvas.width / renderAccuracy, element.material.image.height, element.xPos, element.yPos, element.xWidth, element.yWidth)
+            }
+            else {
+                const lineLength = element.yWidth
+                let currentHeight = element.yPos
+                materialApplier: for (let v = 0; v < Object.keys(element.material ?? {}).length; v++) {
+                    if (v == 0) {
 
-                    ctx.fillStyle = Object.values(element.material)[0]
-                    if (element.material.color !== undefined) {
-                        ctx.fillStyle = element.material.color
+                        ctx.fillStyle = Object.values(element.material ?? {})[0]
+                        /*if (element.material.color !== undefined) {  // material.color doesn't exist
+                            ctx.fillStyle = element.material.color
+                        }*/
+                        const calc = (lineLength * parseFloat(Object.keys(element.material ?? {})[0]))
+                        ctx.fillRect(element.xPos, element.yPos, element.xWidth, calc)
+                        currentHeight += calc
                     }
-                    const calc = (lineLength * parseFloat(Object.keys(element.material)[0]))
-                    ctx.fillRect(element.xPos, element.yPos, element.xWidth, calc)
-                    currentHeight += calc
-                }
-                if (v >= Object.keys(element.material).length - 1) {
-                    ctx.fillStyle = Object.values(element.material)[v]
-                    ctx.fillRect(element.xPos, currentHeight, element.xWidth, lineLength * (1 - parseFloat(Object.keys(element.material)[v])))
-                }
-                else {
-                    const calc = lineLength * ((parseFloat(Object.keys(element.material)[v + 1])) - parseFloat(Object.keys(element.material)[v]))
-                    ctx.fillStyle = Object.values(element.material)[v]
-                    ctx.fillRect(element.xPos, currentHeight, element.xWidth, calc)
-                    currentHeight += calc
+                    if (v >= Object.keys(element.material ?? {}).length - 1) {
+                        ctx.fillStyle = Object.values(element.material ?? {})[v]
+                        ctx.fillRect(element.xPos, currentHeight, element.xWidth, lineLength * (1 - parseFloat(Object.keys(element.material ?? {})[v])))
+                    }
+                    else {
+                        const calc = lineLength * ((parseFloat(Object.keys(element.material ?? {})[v + 1])) - parseFloat(Object.keys(element.material ?? {})[v]))
+                        ctx.fillStyle = Object.values(element.material ?? {})[v]
+                        ctx.fillRect(element.xPos, currentHeight, element.xWidth, calc)
+                        currentHeight += calc
 
+                    }
                 }
             }
         }
         else {
-            ctx.fillStyle = element.material
+            ctx.fillStyle = element.material?.toString() ?? ""
             ctx.fillRect(element.xPos, element.yPos, element.xWidth, element.yWidth)
         }
     });
     currentFrameData = []
-    if (isFiring) {
-        drawSquare(myCanvas.width / 2 - 80, myCanvas.height - 190, "rgba(255, 175, 0, 0.5)", 160, ctx)
-        drawSquare(myCanvas.width / 2 - 40, myCanvas.height - 150, "rgba(255, 0, 0, 0.61)", 80, ctx)
-
-    }
-    ctx.fillStyle = "rgb(140, 140, 140)"
-    ctx.fillRect(myCanvas.width / 2 - 10, myCanvas.height - 100, 20, 100)
 }
 function addWall() {
-    if(document.getElementById("material").value==""){document.getElementById("selectMaterialText").innerHTML="SELECT A MATERIAL BELOW FIRST";return}
-    const xStart = +(document.getElementById("xStart")).value
-    const yStart = +(document.getElementById("yStart")).value
-    const xEnd = +(document.getElementById("xEnd")).value
-    const yEnd = +(document.getElementById("yEnd")).value
-    const isSeeThrough = document.getElementById("isSeeThrough").checked
-    makeLine(xStart, yStart, xEnd, yEnd, document.getElementById("material").value, isSeeThrough, "wall")
+    if (/** @type {HTMLInputElement} */ (document.getElementById("material")).value == "") { /** @type {HTMLElement} */ (document.getElementById("selectMaterialText")).innerHTML = "SELECT A MATERIAL BELOW FIRST"; return }
+    const xStart = +/** @type {HTMLInputElement} */(document.getElementById("xStart")).value
+    const yStart = +/** @type {HTMLInputElement} */(document.getElementById("yStart")).value
+    const xEnd = +/** @type {HTMLInputElement} */(document.getElementById("xEnd")).value
+    const yEnd = +/** @type {HTMLInputElement} */(document.getElementById("yEnd")).value
+    const isSeeThrough = /** @type {HTMLInputElement} */ (document.getElementById("isSeeThrough")).checked
+    makeLine(xStart, yStart, xEnd, yEnd, /** @type {HTMLInputElement} */(document.getElementById("material")).value, isSeeThrough, "wall")
 }
 function reset() {
     playerVector.magnitude = 0
@@ -490,6 +556,13 @@ function reset() {
 function materialEncyclopedia(materialName, wallDistanceFromOrigin) {
 
     switch (materialName) {
+        case "imagetestTexture1":
+            const position = parseFloat(getDecimalPart(wallDistanceFromOrigin)) * testTexture1.width
+            return { image: testTexture1, position: position }
+        case "imagechainlinkFence":
+            const position2 = parseFloat(getDecimalPart(wallDistanceFromOrigin)) * chainlinkFence.width
+            return { image: chainlinkFence, position: position2 }
+
         case "rainbow":
             const r = (Math.sin(wallDistanceFromOrigin + currentFrame / 5)) * 255;
             const g = (Math.sin(wallDistanceFromOrigin + 2 + currentFrame / 5)) * 255;
@@ -509,23 +582,24 @@ function materialEncyclopedia(materialName, wallDistanceFromOrigin) {
         case "verticalblackwhitesinewave":
             /** @type {string} */
             const decimalPart = getDecimalPart(Math.sin(wallDistanceFromOrigin * 2) / 2 + 0.5)
-            if (decimalPart <= 0.01) { return "black" }
+            if (parseFloat(decimalPart) <= 0.01) { return "black" }
             const waveHeight = decimalPart.slice(0, 4)
             return { 0: "white", [waveHeight]: "black" }
         case "verticalbricks":
             const wallBlockPos = getDecimalPart(wallDistanceFromOrigin)
             const wallBlockDecisionNum = wallBlockPos.toString().slice(2, 4)
-            if (wallBlockDecisionNum % 25 <= 2) { return "black" }
-            if (wallBlockDecisionNum < 25) {
+            const wallBlockDecisionNumber = parseFloat(wallBlockDecisionNum);
+            if (wallBlockDecisionNumber % 25 <= 2) { return "black" }
+            if (wallBlockDecisionNumber < 25) {
                 return { 0: "orange", 0.09: "black", 0.10: "orange", 0.19: "black", 0.20: "orange", 0.29: "black", 0.30: "orange", 0.39: "black", 0.40: "orange", 0.49: "black", 0.50: "orange", 0.59: "black", 0.60: "orange", 0.69: "black", 0.70: "orange", 0.79: "black", 0.80: "orange", 0.89: "black", 0.90: "orange", 0.99: "black" }
             }
-            if (wallBlockDecisionNum > 50 && wallBlockDecisionNum < 75) {
+            if (wallBlockDecisionNumber > 50 && wallBlockDecisionNumber < 75) {
                 return { 0: "orange", 0.09: "black", 0.10: "orange", 0.19: "black", 0.20: "orange", 0.29: "black", 0.30: "orange", 0.39: "black", 0.40: "orange", 0.49: "black", 0.50: "orange", 0.59: "black", 0.60: "orange", 0.69: "black", 0.70: "orange", 0.79: "black", 0.80: "orange", 0.89: "black", 0.90: "orange", 0.99: "black" }
             }
             return { 0: "orange", 0.04: "black", 0.05: "orange", 0.14: "black", 0.15: "orange", 0.24: "black", 0.25: "orange", 0.34: "black", 0.35: "orange", 0.44: "black", 0.45: "orange", 0.54: "black", 0.55: "orange", 0.64: "black", 0.65: "orange", 0.74: "black", 0.75: "orange", 0.84: "black", 0.85: "orange", 0.94: "black", 0.95: "orange" }
 
         case "glass":
-            if (getDecimalPart(wallDistanceFromOrigin) > 0.94) {
+            if (parseFloat(getDecimalPart(wallDistanceFromOrigin)) > 0.94) {
                 return "black"
             }
             return "rgba(0,0,255,0.1)"
@@ -538,12 +612,12 @@ function materialEncyclopedia(materialName, wallDistanceFromOrigin) {
             if (calc > 1) { return "rgba(0,0,0,0)" }
             /** @type {string} */
             const waveSize = getDecimalPart(calc).slice(0, 4)
-            return { 0: "rgba(0,0,0,0)", [waveSize - 0.1]: "rgba(0,0,150,0.1)", [waveSize]: "rgba(0,0,200,0.4)" }
+            return { 0: "rgba(0,0,0,0)", [parseFloat(waveSize) - 0.1]: "rgba(0,0,150,0.1)", [waveSize]: "rgba(0,0,200,0.4)" }
         case "verticalbluby": //WIP
-            const singleBlock = (getDecimalPart(wallDistanceFromOrigin)) * 4
+            const singleBlock = (parseFloat(getDecimalPart(wallDistanceFromOrigin))) * 4
             // if(singleBlock>0.95){return "black"}
             const fish = getDecimalPart((singleBlock - 0.1) * 2 * singleBlock + 0.1)
-            return { 0: "rgba(0,0,0,0)", [fish]: "lightblue", [1 - fish]: "rgba(0,0,0,0)" }
+            return { 0: "rgba(0,0,0,0)", [fish]: "lightblue", [1 - parseFloat(fish)]: "rgba(0,0,0,0)" }
         default:
             break;
     }
@@ -557,17 +631,20 @@ function returnIntersectionDistanceFromOrigin(wallVector, intersectionPoint) {
     return (Math.sqrt((wallVector.start.x - intersectionPoint.x) * (wallVector.start.x - intersectionPoint.x) + (wallVector.start.y - intersectionPoint.y) * (wallVector.start.y - intersectionPoint.y)))
 }
 function drawPlayerOnMap() {
-    drawSquare(playerpos.x, playerpos.y, "magenta", 2, ctm)
+    drawSquare(playerpos.x, playerpos.y, "magenta", 5, ctm)
 }
 function drawMap() {
-
     ctm.clearRect(0, 0, myMap.height, myMap.width)
-    for (let i = 0; i <= (mapData.length) - 1; i++) {
-        for (let j = 0; j <= (mapData[i].length) - 1; j++) {
-            const element = mapData[i][j];
-            drawSquare(element.x, element.y, element.material, 1, ctm)
-        };
-    }
+    /* for (let i = 0; i <= (mapData.length) - 1; i++) {
+         for (let j = 0; j <= (mapData[i].length) - 1; j++) {
+             const element = mapData[i][j];
+             drawSquare(element.x, element.y, element.material, 1, ctm)
+         };
+     }
+     */
+    vectorMapData.forEach(element => {
+        drawLine(element.start, element.end, "brown", ctm)
+    });
 }
 /**
  * @param {Vector} vector 
@@ -612,7 +689,7 @@ function rayCastingReturnWall(startingPoint, angle, length) {
                 element.intersection = a
 
                 relevantVectorMapData.push(element)
-                drawSquare(a.x, a.y, "white", 2, ctm)
+                if (controller[9].pressed) { drawSquare(a.x, a.y, "white", 2, ctm) }
             }
         }
     });
@@ -640,7 +717,21 @@ function rayCastingReturnWall(startingPoint, angle, length) {
         }
     }
 }
+/**
+ * @param {Vector} startingPoint 
+ * @param {Vector} endingPoint
+ * @param {string} color 
+ * @param {object} canvas
+ */
 
+function drawLine(startingPoint, endingPoint, color, canvas) {
+    canvas.strokeStyle = color;
+    canvas.lineWidth = 1;
+    canvas.beginPath()
+    canvas.moveTo(startingPoint.x, startingPoint.y);
+    canvas.lineTo(endingPoint.x, endingPoint.y);
+    canvas.stroke();
+}
 /**
  * @param {number} x 
  * @param {number} y 
@@ -776,9 +867,15 @@ function gameClock() {
     //   if(animcount<500){testAnim()}
     moveMaker()
     movementExecuter()
-    drawMap()
-    drawPlayerOnMap()
+    if (controller[9].pressed) {
+        drawMap()
+        drawPlayerOnMap()
+    }
+    else {
+        ctm.clearRect(0, 0, myMap.height, myMap.width)
+    }
     drawFrame()
+
     if (!gametickPause) { currentFrame++ }
     setTimeout(() => {
         gameClock()
@@ -798,6 +895,7 @@ function isObject(value) {
         typeof value === 'object'
     );
 }
+
 /**
  * @param {number} x 
  * @returns {string}
